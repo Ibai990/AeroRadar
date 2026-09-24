@@ -1,6 +1,7 @@
 using AeroRadar.Configuration;
 using AeroRadar.Services;
 using Microsoft.Extensions.Options;
+using AeroRadar.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,19 +21,21 @@ builder.Services.AddHttpClient<IOpenSkyClient, OpenSkyClient>((serviceProvider, 
 
 builder.Services.AddSingleton<AlmacenAviones>();
 builder.Services.AddHostedService<ConsultaAvionesService>();
+builder.Services.AddSignalR();
 
 var app = builder.Build();
+
+app.UseHttpsRedirection();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.UseStaticFiles();
 }
 
-app.UseHttpsRedirection();
-
 app.UseAuthorization();
-
 app.MapControllers();
+app.MapHub<AvionesHub>("/hubs/aviones");
 
 app.Run();

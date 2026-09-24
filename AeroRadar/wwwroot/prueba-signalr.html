@@ -1,0 +1,34 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>Prueba SignalR - AeroRadar</title>
+</head>
+<body>
+    <h1>Prueba SignalR</h1>
+    <p id="estado">Conectando...</p>
+    <pre id="resultado"></pre>
+
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
+    <script>
+        const estado = document.getElementById("estado");
+        const resultado = document.getElementById("resultado");
+
+        const conexion = new signalR.HubConnectionBuilder()
+            .withUrl("/hubs/aviones")
+            .withAutomaticReconnect()
+            .build();
+
+        conexion.on("RecibirAviones", instantanea => {
+            const hora = new Date().toLocaleTimeString();
+            resultado.textContent =
+                `[${hora}] ${instantanea.aviones.length} aviones (actualizado: ${instantanea.actualizadoUtc})\n`
+                + resultado.textContent;
+        });
+
+        conexion.start()
+            .then(() => estado.textContent = "Conectado")
+            .catch(error => estado.textContent = "Error: " + error);
+    </script>
+</body>
+</html>
