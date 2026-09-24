@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using AeroRadar.Configuration;
 using Microsoft.Extensions.Options;
+using AeroRadar.Services;
 
 namespace AeroRadar.Controllers;
 
@@ -10,10 +11,11 @@ public class StatusController : ControllerBase
 {
 
     private readonly OpenSkyOptions _opcionesOpenSky;
-
-    public StatusController(IOptions<OpenSkyOptions> opcionesOpenSky)
+    private readonly ContadorConexiones _contador;
+    public StatusController(IOptions<OpenSkyOptions> opcionesOpenSky, ContadorConexiones contador)
     {
         _opcionesOpenSky = opcionesOpenSky.Value;
+        _contador = contador;
     }
 
     [HttpGet]
@@ -27,6 +29,7 @@ public class StatusController : ControllerBase
             service = "AeroRadar API",
             status = "running",
             serverTimeUtc = DateTime.UtcNow,
+            clientesConectados = _contador.Conexiones,
             intervaloConsultaSegundos = _opcionesOpenSky.IntervaloConsultaSegundos,
             zonaConsulta = new
             {

@@ -22,6 +22,7 @@ builder.Services.AddHttpClient<IOpenSkyClient, OpenSkyClient>((serviceProvider, 
 builder.Services.AddSingleton<AlmacenAviones>();
 builder.Services.AddHostedService<ConsultaAvionesService>();
 builder.Services.AddSignalR();
+builder.Services.AddSingleton<ContadorConexiones>();
 
 var app = builder.Build();
 
