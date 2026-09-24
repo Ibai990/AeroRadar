@@ -7,17 +7,23 @@ namespace AeroRadar.Controllers;
 [Route("api/[controller]")]
 public class AvionesController : ControllerBase
 {
-    private readonly IOpenSkyClient _openSkyClient;
+    private readonly AlmacenAviones _almacen;
 
-    public AvionesController(IOpenSkyClient openSkyClient)
+    public AvionesController(AlmacenAviones almacen)
     {
-        _openSkyClient = openSkyClient;
+        _almacen = almacen;
     }
 
     [HttpGet]
-    public async Task<IActionResult> Get(CancellationToken cancellationToken)
+    public IActionResult Get()
     {
-        var aviones = await _openSkyClient.ObtenerAvionesAsync(cancellationToken);
-        return Ok(new { total = aviones.Count, aviones });
+        var instantanea = _almacen.Actual;
+
+        return Ok(new
+        {
+            total = instantanea.Aviones.Count,
+            actualizadoUtc = instantanea.ActualizadoUtc,
+            aviones = instantanea.Aviones
+        });
     }
 }

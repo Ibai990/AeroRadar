@@ -18,6 +18,9 @@ builder.Services.AddHttpClient<IOpenSkyClient, OpenSkyClient>((serviceProvider, 
     client.Timeout = TimeSpan.FromSeconds(20);
 });
 
+builder.Services.AddSingleton<AlmacenAviones>();
+builder.Services.AddHostedService<ConsultaAvionesService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
