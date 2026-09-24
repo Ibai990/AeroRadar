@@ -26,6 +26,7 @@ builder.Services.AddSingleton<AlmacenAviones>();
 builder.Services.AddHostedService<ConsultaAvionesService>();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<ContadorConexiones>();
+builder.Services.AddSingleton<EstadoCuota>();
 
 var app = builder.Build();
 

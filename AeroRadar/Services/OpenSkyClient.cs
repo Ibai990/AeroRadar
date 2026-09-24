@@ -1,7 +1,8 @@
-﻿using System.Text.Json;
-using AeroRadar.Configuration;
+﻿using AeroRadar.Configuration;
 using AeroRadar.Models;
 using Microsoft.Extensions.Options;
+using System.Net;
+using System.Text.Json;
 
 namespace AeroRadar.Services;
 
@@ -16,23 +17,33 @@ public class OpenSkyClient : IOpenSkyClient
         _opciones = opciones.Value;
     }
 
-    public async Task<List<Avion>> ObtenerAvionesAsync(CancellationToken cancellationToken = default)
+    public async Task<ResultadoConsultaOpenSky> ObtenerAvionesAsync(CancellationToken cancellationToken = default)
     {
         var zona = _opciones.Zona;
         var url = FormattableString.Invariant(
             $"states/all?lamin={zona.LatitudMin}&lomin={zona.LongitudMin}&lamax={zona.LatitudMax}&lomax={zona.LongitudMax}");
 
-        var respuesta = await _httpClient.GetFromJsonAsync<RespuestaEstadosOpenSky>(url, cancellationToken);
+        using var respuesta = await _httpClient.GetAsync(url, cancellationToken);
 
-        if (respuesta?.Estados is null)
+        if (respuesta.StatusCode == HttpStatusCode.TooManyRequests)
         {
-            return [];
+            var segundosEspera = LeerCabeceraEntera(respuesta, "X-Rate-Limit-Retry-After-Seconds") ?? 300;
+            throw new CuotaAgotadaException(TimeSpan.FromSeconds(segundosEspera));
         }
 
-        return respuesta.Estados
-            .Select(ConvertirAAvion)
-            .Where(avion => avion.Latitud is not null && avion.Longitud is not null)
-            .ToList();
+        respuesta.EnsureSuccessStatusCode();
+
+        var creditosRestantes = LeerCabeceraEntera(respuesta, "X-Rate-Limit-Remaining");
+        var datos = await respuesta.Content.ReadFromJsonAsync<RespuestaEstadosOpenSky>(cancellationToken);
+
+        List<Avion> aviones = datos?.Estados is null
+            ? []
+            : datos.Estados
+                .Select(ConvertirAAvion)
+                .Where(avion => avion.Latitud is not null && avion.Longitud is not null)
+                .ToList();
+
+        return new ResultadoConsultaOpenSky(aviones, creditosRestantes);
     }
 
     private static Avion ConvertirAAvion(JsonElement[] estado)
@@ -66,4 +77,10 @@ public class OpenSkyClient : IOpenSkyClient
 
     private static bool LeerBooleano(JsonElement[] estado, int indice) =>
         estado[indice].ValueKind == JsonValueKind.True;
+
+    private static int? LeerCabeceraEntera(HttpResponseMessage respuesta, string nombre) =>
+    respuesta.Headers.TryGetValues(nombre, out var valores)
+    && int.TryParse(valores.FirstOrDefault(), out var numero)
+        ? numero
+        : null;
 }

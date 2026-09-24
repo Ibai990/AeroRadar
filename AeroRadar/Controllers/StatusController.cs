@@ -12,10 +12,12 @@ public class StatusController : ControllerBase
 
     private readonly OpenSkyOptions _opcionesOpenSky;
     private readonly ContadorConexiones _contador;
-    public StatusController(IOptions<OpenSkyOptions> opcionesOpenSky, ContadorConexiones contador)
+    private readonly EstadoCuota _estadoCuota;
+    public StatusController(IOptions<OpenSkyOptions> opcionesOpenSky, ContadorConexiones contador, EstadoCuota estadoCuota)
     {
         _opcionesOpenSky = opcionesOpenSky.Value;
         _contador = contador;
+        _estadoCuota = estadoCuota;
     }
 
     [HttpGet]
@@ -31,6 +33,13 @@ public class StatusController : ControllerBase
             serverTimeUtc = DateTime.UtcNow,
             clientesConectados = _contador.Conexiones,
             modoAcceso = _opcionesOpenSky.TieneCredenciales ? "autenticado" : "anonimo",
+            cuota = new
+            {
+                _estadoCuota.Actual.CreditosRestantes,
+                creditosDiarios = _opcionesOpenSky.CreditosDiarios,
+                intervaloActualSegundos = _estadoCuota.Actual.IntervaloActual.TotalSeconds,
+                _estadoCuota.Actual.PausadoHastaUtc
+            },
             intervaloConsultaSegundos = _opcionesOpenSky.IntervaloConsultaSegundos,
             zonaConsulta = new
             {

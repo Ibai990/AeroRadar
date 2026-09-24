@@ -1,7 +1,8 @@
 ﻿using AeroRadar.Configuration;
-using Microsoft.Extensions.Options;
 using AeroRadar.Hubs;
+using AeroRadar.Models;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Options;
 
 namespace AeroRadar.Services;
 
@@ -13,6 +14,7 @@ public class ConsultaAvionesService : BackgroundService
     private readonly ILogger<ConsultaAvionesService> _logger;
     private readonly IHubContext<AvionesHub, IAvionesCliente> _hubContext;
     private readonly ContadorConexiones _contador;
+    private readonly EstadoCuota _estadoCuota;
 
     public ConsultaAvionesService(
     IServiceScopeFactory scopeFactory,
@@ -20,7 +22,7 @@ public class ConsultaAvionesService : BackgroundService
     IHubContext<AvionesHub, IAvionesCliente> hubContext,
     IOptions<OpenSkyOptions> opciones,
     ILogger<ConsultaAvionesService> logger,
-    ContadorConexiones contador)
+    ContadorConexiones contador, EstadoCuota estadoCuota)
     {
         _scopeFactory = scopeFactory;
         _almacen = almacen;
@@ -28,12 +30,11 @@ public class ConsultaAvionesService : BackgroundService
         _opciones = opciones.Value;
         _logger = logger;
         _contador = contador;
+        _estadoCuota = estadoCuota;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var intervalo = TimeSpan.FromSeconds(_opciones.IntervaloConsultaSegundos);
-
         while (!stoppingToken.IsCancellationRequested)
         {
             if (_contador.Conexiones == 0)
@@ -43,32 +44,69 @@ public class ConsultaAvionesService : BackgroundService
                 _logger.LogInformation("Cliente conectado. Reanudando consultas");
             }
 
-            await ConsultarAsync(stoppingToken);
-            await Task.Delay(intervalo, stoppingToken);
+            var espera = await ConsultarAsync(stoppingToken);
+            await Task.Delay(espera, stoppingToken);
         }
     }
 
-    private async Task ConsultarAsync(CancellationToken stoppingToken)
+    private async Task<TimeSpan> ConsultarAsync(CancellationToken stoppingToken)
     {
+        var intervaloBase = TimeSpan.FromSeconds(_opciones.IntervaloConsultaSegundos);
+
         try
         {
             using var scope = _scopeFactory.CreateScope();
             var cliente = scope.ServiceProvider.GetRequiredService<IOpenSkyClient>();
 
-            var aviones = await cliente.ObtenerAvionesAsync(stoppingToken);
-            _almacen.Actualizar(aviones);
-
+            var resultado = await cliente.ObtenerAvionesAsync(stoppingToken);
+            _almacen.Actualizar(resultado.Aviones);
             await _hubContext.Clients.All.RecibirAviones(_almacen.Actual);
 
-            _logger.LogInformation("Consulta completada: {Total} aviones", aviones.Count);
+            var intervalo = CalcularIntervalo(resultado.CreditosRestantes, intervaloBase);
+            _estadoCuota.Actualizar(new InfoCuota(resultado.CreditosRestantes, intervalo, null));
+
+            _logger.LogInformation(
+                "Consulta completada: {Total} aviones. Créditos restantes: {Creditos}. Próxima consulta en {Segundos} s",
+                resultado.Aviones.Count, resultado.CreditosRestantes, intervalo.TotalSeconds);
+
+            return intervalo;
+        }
+        catch (CuotaAgotadaException ex)
+        {
+            var pausadoHasta = DateTimeOffset.UtcNow + ex.EsperaRecomendada;
+            _estadoCuota.Actualizar(new InfoCuota(0, ex.EsperaRecomendada, pausadoHasta));
+
+            _logger.LogWarning("Cuota de OpenSky agotada. Consultas en pausa hasta {Hora}", pausadoHasta);
+            return ex.EsperaRecomendada;
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            // La aplicación se está cerrando: no es un error.
+            return TimeSpan.Zero;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error al consultar OpenSky");
+            return intervaloBase;
         }
+    }
+
+    private TimeSpan CalcularIntervalo(int? creditosRestantes, TimeSpan intervaloBase)
+    {
+        if (creditosRestantes is null)
+        {
+            return intervaloBase;
+        }
+
+        var porcentaje = (double)creditosRestantes.Value / _opciones.CreditosDiarios;
+
+        var multiplicador = porcentaje switch
+        {
+            >= 0.25 => 1,
+            >= 0.10 => 2,
+            >= 0.03 => 4,
+            _ => 8
+        };
+
+        return intervaloBase * multiplicador;
     }
 }
