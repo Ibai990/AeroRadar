@@ -30,6 +30,7 @@ public class StatusController : ControllerBase
             status = "running",
             serverTimeUtc = DateTime.UtcNow,
             clientesConectados = _contador.Conexiones,
+            modoAcceso = _opcionesOpenSky.TieneCredenciales ? "autenticado" : "anonimo",
             intervaloConsultaSegundos = _opcionesOpenSky.IntervaloConsultaSegundos,
             zonaConsulta = new
             {

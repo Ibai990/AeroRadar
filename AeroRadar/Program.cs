@@ -12,12 +12,15 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.Configure<OpenSkyOptions>(builder.Configuration.GetSection(OpenSkyOptions.SectionName));
 
+builder.Services.AddSingleton<GestorTokenOpenSky>();
+builder.Services.AddTransient<OpenSkyAuthHandler>();
+
 builder.Services.AddHttpClient<IOpenSkyClient, OpenSkyClient>((serviceProvider, client) =>
 {
     var opciones = serviceProvider.GetRequiredService<IOptions<OpenSkyOptions>>().Value;
     client.BaseAddress = new Uri(opciones.UrlBase.TrimEnd('/') + "/");
     client.Timeout = TimeSpan.FromSeconds(20);
-});
+}).AddHttpMessageHandler<OpenSkyAuthHandler>();
 
 builder.Services.AddSingleton<AlmacenAviones>();
 builder.Services.AddHostedService<ConsultaAvionesService>();
